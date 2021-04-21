@@ -1,19 +1,23 @@
 # -*- coding=utf8 -*-
+
 """
-    获取HMM模型
+    制作HMM模型
 """
+
 from __future__ import division
 from math import log
 
 from pypinyin import pinyin, NORMAL
-from code.model import (
+
+from model import (
     Transition,
     Emission,
     Starting,
     init_hmm_tables,
     HMMSession
 )
-from code.lib.utils import iter_dict
+
+from lib.utils import iter_dict
 
 
 def init_start():
@@ -22,56 +26,94 @@ def init_start():
     """
     freq_map = {}
     total_count = 0
+
     for phrase, frequency in iter_dict():
         total_count += frequency
-        freq_map[phrase[0]] = freq_map.get(phrase[0], 0) + frequency
+
+        # 统计所有词组的第一个字出现的频率
+        first_word = phrase[0]
+        freq_map[first_word] = freq_map.get(first_word, 0) + frequency
 
     for character, frequency in freq_map.iteritems():
-        Starting.add(character, log(frequency / total_count))
+        # convert frequency into percentage
+        char_percentage = frequency / total_count
+
+        # make discrimination between small percentage value
+        char_log_value = log(char_percentage)
+
+        Starting.add(character, char_log_value)
 
 
 def init_emission():
     """
     初始化发射概率
     """
+
     character_pinyin_map = {}
+
     for phrase, frequency in iter_dict():
+        '''
+        pinyin 接口输出数据
+            >>> pinyin('步履蹒跚')
+            [['bù'], ['lǚ'], ['mán'], ['shān']]
+        '''
         pinyins = pinyin(phrase, style=NORMAL)
+
         for character, py in zip(phrase, pinyins):
             character_pinyin_count = len(py)
+
+            # py is like ['lǚ'], may have several values
+            # must divide the frequency to the same parts, name it as mean frequency
+            mean_frequency = frequency/character_pinyin_count
+
             if character not in character_pinyin_map:
-                character_pinyin_map[character] = \
-                    {x: frequency/character_pinyin_count for x in py}
+                character_pinyin_map[character] = {x: mean_frequency for x in py}
             else:
                 pinyin_freq_map = character_pinyin_map[character]
+
                 for x in py:
-                    pinyin_freq_map[x] = pinyin_freq_map.get(x, 0) + \
-                                         frequency/character_pinyin_count
+                    pinyin_freq_map[x] = pinyin_freq_map.get(x, 0) + mean_frequency
 
     for character, pinyin_map in character_pinyin_map.iteritems():
+        # get total emission frequency for one character
         sum_frequency = sum(pinyin_map.values())
+
         for py, frequency in pinyin_map.iteritems():
-            Emission.add(character, py, log(frequency/sum_frequency))
+            py_percentage = frequency/sum_frequency
+            py_log_value = log(py_percentage)
+
+            Emission.add(character, py, py_log_value)
 
 
 def init_transition():
     """
     初始化转移概率
+
+    todo 优化 太慢
     """
-    # todo 优化 太慢
+
     transition_map = {}
+
     for phrase, frequency in iter_dict():
         for i in range(len(phrase) - 1):
-            if phrase[i] in transition_map:
-                transition_map[phrase[i]][phrase[i+1]] = \
-                    transition_map[phrase[i]].get(phrase[i+1], 0) + frequency
-            else:
-                transition_map[phrase[i]] = {phrase[i+1]: frequency}
+            prev_char = phrase[i]
+            next_char = phrase[i+1]
 
-    for previous, behind_map in transition_map.iteritems():
-        sum_frequency = sum(behind_map.values())
-        for behind, freq in behind_map.iteritems():
-            Transition.add(previous, behind, log(freq / sum_frequency))
+            if prev_char in transition_map:
+                current_frequency = transition_map[prev_char].get(next_char, 0)
+                transition_map[prev_char][next_char] = current_frequency + frequency
+            else:
+                transition_map[prev_char] = {next_char: frequency}
+
+    for previous, next_map in transition_map.iteritems():
+        # get total frequency for all next chars
+        sum_frequency = sum(next_map.values())
+
+        for next_char, freq in next_map.iteritems():
+            next_percentage = freq / sum_frequency
+            next_log_value = log(next_percentage)
+
+            Transition.add(previous, next_char, next_log_value)
 
 
 if __name__ == '__main__':

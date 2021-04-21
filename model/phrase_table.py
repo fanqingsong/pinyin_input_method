@@ -15,9 +15,10 @@ PhraseSession = sessionmaker(bind=engine)
 
 
 class PhrasePinyin(BaseModel):
-'''
-    store phrase probability in one pinyin
-'''
+    '''
+        store phrase probability in one pinyin
+    '''
+
     __tablename__ = 'phrase_pinyin'
 
     id = Column(Integer, primary_key=True)
