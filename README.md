@@ -1,4 +1,4 @@
-# Pinyin_Demo
+# Pinyin Input Method on HMM
 
 一个简单拼音输入法
 
@@ -22,7 +22,7 @@
 
 #### model定义
 
-代码见model/table.py文件，针对隐马尔科夫的三个概率矩阵，分别设计了三个数据表存储。这样的好处很明显，汉字的转移概率矩阵是一个非常大的稀疏矩阵，直接文件存储占用空间很大，并且加载的时候也只能一次性读入内存，不仅内存占用高而且加载速度慢。此外数据库的join操作非常方便viterbi算法中的概率计算。
+代码见model/hmm_table.py文件，针对隐马尔科夫的三个概率矩阵，分别设计了三个数据表存储。这样的好处很明显，汉字的转移概率矩阵是一个非常大的稀疏矩阵，直接文件存储占用空间很大，并且加载的时候也只能一次性读入内存，不仅内存占用高而且加载速度慢。此外数据库的join操作非常方便viterbi算法中的概率计算。
 
 数据表定义如下：
 
@@ -59,7 +59,7 @@ class Starting(BaseModel):
 
 #### 模型生成
 
-代码见train/main.py文件，里面的init_starting，init_emission，init_transition分别对应于生成隐马尔科夫模型中的初始概率矩阵，发射概率矩阵，转移概率矩阵，并把生成的结果写入sqlite文件中。训练用到的数据集是结巴分词里的词库，因为没有训练长句子，最后运行的结果也证明只能适用于短句输入。
+代码见 hmm/train.py文件，里面的init_starting，init_emission，init_transition分别对应于生成隐马尔科夫模型中的初始概率矩阵，发射概率矩阵，转移概率矩阵，并把生成的结果写入sqlite文件中。训练用到的数据集是结巴分词里的词库，因为没有训练长句子，最后运行的结果也证明只能适用于短句输入。
 
 ##### 初始概率矩阵
 
@@ -81,55 +81,155 @@ class Starting(BaseModel):
 
 ![](snapshot/emission.png)
 
+#### 模型训练
+
+在 corpus 目录中， 保存了一份 dict.txt， 为删减版本的jieba词库。
+
+此词库为默认训练词库。
+
+另外一个为 dict.backup.txt为原来repo的词库， 太大，训练时间太长。 所以调试阶段不适用。
+
+模型所在数据库有也对应两个
+hmm.sqlite
+hmm.backup.sqlite
+
+运行命令
+```
+./bin/run.sh hmm/train.py
+```
+
 #### viterbi实现
 
-代码建input_method/viterbi.py文件，此处会找到最多十个局部最优解，注意是十个局部最优解而不是十个全局最优解，但是这十个解中最优的那个是全局最优解，代码如下：
+代码建hmm/viterbi.py文件，此处会找到最多十个局部最优解，注意是十个局部最优解而不是十个全局最优解，但是这十个解中最优的那个是全局最优解，代码如下：
 
 ```python
 def viterbi(pinyin_list):
     """
     viterbi算法实现输入法
 
-    Aargs:
+    Args:
         pinyin_list (list): 拼音列表
     """
-    start_char = Emission.join_starting(pinyin_list[0])
+
+    # query the char-prob pair
+    # char must in starting table, named as start_char
+    # prob = start_char prob * emit_prob
+    # emit_prob is the probability that start_char emit to the start_pinyin
+    start_pinyin = pinyin_list[0]
+
+    start_char = Emission.join_starting(start_pinyin)
+    print("------ start_char -------")
+    print(start_char)
+
     V = {char: prob for char, prob in start_char}
 
+    print("------ V -------")
+    print(V)
+
+    print("\r\n")
+
+    # let's count from the second pinyin to calc viterbi matrix
     for i in range(1, len(pinyin_list)):
         pinyin = pinyin_list[i]
 
+        print("------ i -------")
+        print(i)
+
+        print("------ pinyin -------")
+        print(pinyin)
+
         prob_map = {}
+
         for phrase, prob in V.iteritems():
-            character = phrase[-1]
-            result = Transition.join_emission(pinyin, character)
+            print("------ phrase -------")
+            print(phrase)
+
+            print("------ prob -------")
+            print(prob)
+
+            prev_char = phrase[-1]
+
+            # only get the most possible next_char, with highest probability
+            result = Transition.join_emission(pinyin, prev_char)
+            print("------ result -------")
+            print(result)
+
             if not result:
                 continue
 
-            state, new_prob = result
-            prob_map[phrase + state] = new_prob + prob
+            # next_prob = transfer probability(pre_char -> next_char) * emission probability(next_char -> pinyin)
+            next_char, next_prob = result
+            print("-------- next_char --------")
+            print(next_char)
+
+            # make new V of new char path, ie phrase.
+            prob_map[phrase + next_char] = next_prob + prob
 
         if prob_map:
+            # update V, in order to do further research
             V = prob_map
         else:
             return V
+
+        print("\r\n")
+
     return V
 ```
 
 ### 结果展示
 
-运行input_method/viterbi.py文件，简单的展示一下运行结果：
+运行文件，简单的展示一下运行结果：
+
+```
+./bin/run.sh hmm/viterbi.py
+```
 
 ![](snapshot/result.png)
+
+
+输出
+```
+root@xxx:~/win10/mine/pinyin_input_method# ./bin/run.sh hmm/viterbi.py
+PYTHONPATH=/usr/local/spark/python:/usr/local/spark/python/lib/py4j-0.10.4-src.zip::/root/win10/mine/pinyin_input_method
+input:duan yu
+------ start_char -------
+[(u'\u77ed', -8.848355540206123), (u'\u6bb5', -8.848355540206123)]
+------ V -------
+{u'\u6bb5': -8.848355540206123, u'\u77ed': -8.848355540206123}
+
+
+------ i -------
+1
+------ pinyin -------
+yu
+------ phrase -------
+段
+------ prob -------
+-8.84835554021
+------ result -------
+(u'\u8a89', -0.1840036429769394)
+-------- next_char --------
+誉
+------ phrase -------
+短
+------ prob -------
+-8.84835554021
+------ result -------
+(u'\u8bed', 0.0)
+-------- next_char --------
+语
+
+
+短语 -8.84835554021
+段誉 -9.03235918318
+input:
+bye bye
+
+```
+
 
 问题统计：
 
 1. 统计字典生成转移矩阵写入数据库的速度太慢，运行一次要将近十分钟。
 2. 发射概率矩阵数据不准确，总有一些汉字的拼音不匹配。
 3. 训练集太小，实现的输入法不适用于长句子。
-
-## 词库匹配事件
-
-将拼音分词后匹配词库，可以实现长句，但是短句效果不如隐马尔科夫模型。
-
-![](snapshot/result2.png)

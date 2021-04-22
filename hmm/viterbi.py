@@ -1,4 +1,5 @@
 # -*- coding=utf8 -*-
+
 """
     viterbi算法实现
 """
@@ -20,36 +21,72 @@ def viterbi(pinyin_list):
     start_pinyin = pinyin_list[0]
 
     start_char = Emission.join_starting(start_pinyin)
+    print("------ start_char -------")
+    print(start_char)
 
     V = {char: prob for char, prob in start_char}
+
+    print("------ V -------")
+    print(V)
+
+    print("\r\n")
 
     # let's count from the second pinyin to calc viterbi matrix
     for i in range(1, len(pinyin_list)):
         pinyin = pinyin_list[i]
 
+        print("------ i -------")
+        print(i)
+
+        print("------ pinyin -------")
+        print(pinyin)
+
         prob_map = {}
 
         for phrase, prob in V.iteritems():
-            character = phrase[-1]
+            print("------ phrase -------")
+            print(phrase)
 
-            result = Transition.join_emission(pinyin, character)
+            print("------ prob -------")
+            print(prob)
+
+            prev_char = phrase[-1]
+
+            # only get the most possible next_char, with highest probability
+            result = Transition.join_emission(pinyin, prev_char)
+            print("------ result -------")
+            print(result)
+
             if not result:
                 continue
 
-            state, new_prob = result
+            # next_prob = transfer probability(pre_char -> next_char) * emission probability(next_char -> pinyin)
+            next_char, next_prob = result
+            print("-------- next_char --------")
+            print(next_char)
 
-            prob_map[phrase + state] = new_prob + prob
+            # make new V of new char path, ie phrase.
+            prob_map[phrase + next_char] = next_prob + prob
 
         if prob_map:
+            # update V, in order to do further research
             V = prob_map
         else:
             return V
+
+        print("\r\n")
+
     return V
 
 
 if __name__ == '__main__':
     while 1:
         string = raw_input('input:')
+
+        if not string:
+            print("bye bye")
+            break
+
         pinyin_list = string.split()
         V = viterbi(pinyin_list)
 

@@ -24,6 +24,8 @@ def init_start():
     """
     初始化起始概率
     """
+    print("making start probability vector")
+
     freq_map = {}
     total_count = 0
 
@@ -48,6 +50,7 @@ def init_emission():
     """
     初始化发射概率
     """
+    print("making emission probability matrix")
 
     character_pinyin_map = {}
 
@@ -91,6 +94,7 @@ def init_transition():
 
     todo 优化 太慢
     """
+    print("making transition probability matrix")
 
     transition_map = {}
 
