@@ -186,6 +186,7 @@ def viterbi(pinyin_list):
 
 ![](snapshot/result.png)
 
+![](snapshot/example_graph.jpg)
 
 输出
 ```
